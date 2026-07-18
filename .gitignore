@@ -1,0 +1,14 @@
+# Python rác
+__pycache__/
+*.pyc
+
+# Môi trường ảo (nếu có)
+venv/
+.env
+
+# Trọng số mô hình và Dữ liệu huấn luyện (Bắt buộc chặn)
+*.pth
+*.pt
+*.pkl
+data/
+logs/
