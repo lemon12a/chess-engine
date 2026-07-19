@@ -1,6 +1,6 @@
 # main.py
 import chess
-from model import ChessNet
+from model import ChessNet, load_checkpoint, find_latest_checkpoint
 from mcts import mcts_search
 
 def run_engine_demo():
@@ -9,6 +9,17 @@ def run_engine_demo():
     
     # Tải mô hình não bộ
     model = ChessNet()
+
+    # Nếu đã chạy train.py và có checkpoint đã lưu thì tải trọng số đó lên; nếu chưa thì
+    # dùng trọng số khởi tạo ngẫu nhiên (engine sẽ chơi rất yếu, gần như ngẫu nhiên)
+    checkpoint_path = find_latest_checkpoint()
+    if checkpoint_path:
+        load_checkpoint(checkpoint_path, model)
+        print(f"Đã tải checkpoint: {checkpoint_path}")
+    else:
+        print("Chưa có checkpoint, dùng trọng số khởi tạo ngẫu nhiên "
+              "(chạy `python train.py` để huấn luyện model).")
+
     model.eval() # Chuyển sang chế độ suy luận (Inference)
     
     print("Khởi tạo ván cờ vua mới:")
