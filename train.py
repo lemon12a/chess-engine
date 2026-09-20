@@ -10,6 +10,7 @@ Cách chạy:
     python train.py                              # dùng tham số mặc định
     python train.py --iterations 20 --games 8 --simulations 60
 """
+import sys
 import random
 import argparse
 from collections import deque
@@ -19,6 +20,14 @@ import chess
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+
+# Trên Windows, khi stdout không gắn trực tiếp với console (bị bọc trong
+# Measure-Command, hoặc pipe qua Tee-Object/redirect ra file,...), Python tự
+# động dùng bảng mã hệ thống cũ (cp1252) thay vì UTF-8, gây lỗi UnicodeEncodeError
+# với các ký tự có dấu tiếng Việt (VD: "ế", "ệ"). Ép UTF-8 ngay từ đầu để tránh lỗi
+# này bất kể script được chạy trực tiếp hay bị bọc/pipe qua lệnh khác.
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 from board import board_to_tensor, ACTION_SPACE_SIZE
 from model import ChessNet, save_checkpoint, load_checkpoint, find_latest_checkpoint

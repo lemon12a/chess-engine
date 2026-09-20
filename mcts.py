@@ -90,7 +90,15 @@ def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy
             continue
             
         # Evaluation & Expansion
-        state_tensor = board_to_tensor(node.board)
+        # BUG ĐÃ SỬA: board_to_tensor() luôn tạo tensor trên CPU, nhưng khi train.py chạy
+        # trên GPU thì model đã được .to(device="cuda"). Đưa tensor vào model khác device
+        # với trọng số của model sẽ báo lỗi "Expected all tensors to be on the same device".
+        # FIX: lấy device thực tế của model (next(model.parameters()).device) rồi chuyển
+        # state_tensor sang đúng device đó trước khi đưa vào model. Trên máy không có GPU,
+        # device sẽ là "cpu" như cũ, không ảnh hưởng gì - đoạn code này an toàn cho cả 2
+        # trường hợp.
+        device = next(model.parameters()).device
+        state_tensor = board_to_tensor(node.board).to(device)
         with torch.no_grad():
             policy_logits, value_tensor = model(state_tensor)
         
@@ -100,10 +108,14 @@ def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy
         # PUCT bị lệch thấp hơn thực tế, làm giảm tác dụng dẫn dắt của policy network.
         # FIX: gán logit của nước đi bất hợp lệ = -vô cực (xấp xỉ) TRƯỚC khi softmax, để
         # softmax tự dồn hết xác suất vào các nước đi hợp lệ (tổng đúng bằng 1).
+        # (Cùng lý do device ở trên: legal_mask tạo bằng numpy -> CPU, phải .to(device)
+        # trước khi so sánh/gán vào masked_logits đang nằm trên GPU; và phải .cpu() lại
+        # TRƯỚC .numpy() vì numpy không đọc trực tiếp được tensor trên GPU.)
         legal_mask = get_legal_action_mask(node.board)
+        legal_mask_tensor = torch.from_numpy(legal_mask).to(device)
         masked_logits = policy_logits.flatten().clone()
-        masked_logits[torch.from_numpy(legal_mask) == 0] = -1e9
-        action_probs = F.softmax(masked_logits, dim=0).numpy()
+        masked_logits[legal_mask_tensor == 0] = -1e9
+        action_probs = F.softmax(masked_logits, dim=0).cpu().numpy()
         
         value = value_tensor.item()
         

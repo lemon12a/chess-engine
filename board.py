@@ -15,14 +15,21 @@ import torch
 # nếu không sẽ bị trùng index với phong Hậu (xem giải thích chi tiết trong move_to_index).
 ACTION_SPACE_SIZE = 4096 + 576  # = 4672
 
+# Số plane đầu vào: 12 plane quân cờ (6 loại x 2 màu) + 1 plane lượt đi = 13.
+# Phải khớp INPUT_CHANNELS trong model.py.
+NUM_INPUT_PLANES = 13
+
 # Thứ tự cố định để tính piece_idx khi mã hoá phong cấp (không gồm Hậu vì Hậu đã nằm trong 4096)
 UNDERPROMOTION_PIECES = [chess.KNIGHT, chess.BISHOP, chess.ROOK]
 
 
 def board_to_tensor(board):
-    """Chuyển đổi bàn cờ sang Tensor 12x8x8"""
+    """
+    Chuyển bàn cờ sang Tensor 13x8x8: 12 plane quân cờ (như cũ) + 1 plane lượt đi.
+    Plane lượt đi = 1.0 nếu đến lượt trắng, 0.0 nếu đến lượt đen.
+    """
     piece_types = [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING]
-    tensor = np.zeros((12, 8, 8), dtype=np.float32)
+    tensor = np.zeros((NUM_INPUT_PLANES, 8, 8), dtype=np.float32)
     
     for square in chess.SQUARES:
         piece = board.piece_at(square)
@@ -32,8 +39,12 @@ def board_to_tensor(board):
                 plane_idx += 6
             row, col = divmod(square, 8)
             tensor[plane_idx, row, col] = 1.0
-            
-    return torch.tensor(tensor).unsqueeze(0) # Trả về dạng (1, 12, 8, 8)
+
+    if board.turn == chess.WHITE:
+        tensor[12, :, :] = 1.0
+    # (Đen sắp đi -> giữ nguyên 0.0)
+
+    return torch.tensor(tensor).unsqueeze(0) # Trả về dạng (1, 13, 8, 8)
 
 def move_to_index(move):
     """

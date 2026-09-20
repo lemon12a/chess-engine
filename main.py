@@ -1,7 +1,13 @@
 # main.py
+import sys
 import chess
 from model import ChessNet, load_checkpoint, find_latest_checkpoint
 from mcts import mcts_search
+
+# Ép UTF-8 cho stdout/stderr để tránh lỗi UnicodeEncodeError trên Windows khi output
+# bị pipe/redirect (xem giải thích chi tiết trong train.py)
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 def run_engine_demo():
     # Khởi tạo bàn cờ tiêu chuẩn 8x8
@@ -21,19 +27,10 @@ def run_engine_demo():
               "(chạy `python train.py` để huấn luyện model).")
 
     model.eval() # Chuyển sang chế độ suy luận (Inference)
-    
-    print("Khởi tạo ván cờ vua mới:")
-    print(board)
-    print("-" * 30)
-    
-    # Giả lập Engine đi nước đầu tiên
+
+    # Kiểm tra nhanh: engine gợi ý nước đi gì ở vị trí khởi đầu chuẩn
     best_move = mcts_search(board, model, num_simulations=40)
     print(f"Engine gợi ý nước đi tối ưu: {best_move}")
-    
-    # Đẩy nước đi vào bàn cờ thực tế
-    board.push(best_move)
-    print("\nBàn cờ sau khi Engine di chuyển:")
-    print(board)
 
 if __name__ == "__main__":
     run_engine_demo()
