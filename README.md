@@ -11,5 +11,8 @@ A chess engine created by using Reinforced Learning
 - Pytorch
 
 ### Environment setup:
-
+- Install essential libraries:
+```
+pip install chess torch
+```
 ### What it can do:
