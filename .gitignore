@@ -1,10 +1,13 @@
-# Python rác
+# Python
+venv/
+.venv/
 __pycache__/
 *.pyc
 
-# Môi trường ảo (nếu có)
-venv/
+# Biến môi trường
 .env
+.env.local
+.env.*.local
 
 # Trọng số mô hình và Dữ liệu huấn luyện (Bắt buộc chặn)
 *.pth
@@ -12,3 +15,13 @@ venv/
 *.pkl
 data/
 logs/
+*.ckpt
+checkpoints/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+npm-debug.log*
