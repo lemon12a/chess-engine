@@ -52,7 +52,8 @@ class MCTSNode:
             self.parent.backpropagate(-value)
 
 
-def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy=False):
+def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy=False,
+                 add_root_noise=False, dirichlet_alpha=0.3, dirichlet_epsilon=0.25):
     """
     MCTS kiểu AlphaZero: dùng model để định hướng (policy prior trong PUCT) và đánh giá
     thế trận (value), thay vì rollout ngẫu nhiên đến hết ván như MCTS cổ điển.
@@ -67,6 +68,17 @@ def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy
         - False (mặc định): chỉ trả về nước đi được chọn - giữ nguyên hành vi/API gốc.
         - True: trả về thêm policy_target (phân phối theo visit_count, kích thước
           ACTION_SPACE_SIZE) để làm nhãn huấn luyện cho policy head.
+
+    add_root_noise / dirichlet_alpha / dirichlet_epsilon:
+        CẢI TIẾN THEO ALPHAZERO GỐC: trộn Dirichlet noise vào policy prior CHỈ Ở NODE GỐC,
+        CHỈ KHI add_root_noise=True (train.py bật khi self-play, run_web.py KHÔNG bật khi
+        AI đánh thật với người). Lý do: nếu không có noise này, MCTS luôn đào sâu đúng
+        những nước mà model HIỆN TẠI đang thiên vị (qua policy prior) - lúc model còn non,
+        điều này khiến self-play bị "đóng khung" vào vài khai cuộc hẹp ngay từ đầu và
+        không bao giờ khám phá được các nước khác có thể tốt hơn, làm chậm hội tụ nghiêm
+        trọng. dirichlet_alpha=0.3 là giá trị AlphaZero gốc dùng riêng cho cờ vua (Go dùng
+        0.03, Shogi dùng 0.15 - do branching factor khác nhau). epsilon=0.25 là trọng số
+        trộn noise, cũng theo đúng paper gốc.
     """
     root = MCTSNode(board)
     
@@ -116,7 +128,15 @@ def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy
         masked_logits = policy_logits.flatten().clone()
         masked_logits[legal_mask_tensor == 0] = -1e9
         action_probs = F.softmax(masked_logits, dim=0).cpu().numpy()
-        
+
+        # Trộn Dirichlet noise - CHỈ ở node gốc (node is root), CHỈ khi add_root_noise=True.
+        # Xem giải thích đầy đủ trong docstring của hàm.
+        if add_root_noise and node is root:
+            legal_indices = np.nonzero(legal_mask)[0]
+            noise = np.random.dirichlet([dirichlet_alpha] * len(legal_indices))
+            for idx, n in zip(legal_indices, noise):
+                action_probs[idx] = (1 - dirichlet_epsilon) * action_probs[idx] + dirichlet_epsilon * n
+
         value = value_tensor.item()
         
         node.expand(action_probs)

@@ -1,18 +1,31 @@
 # train.py
 """
 Vòng lặp huấn luyện kiểu AlphaZero cho ChessNet:
-    Self-play (tự đối kháng bằng MCTS + model hiện tại)
+    Self-play (tự đối kháng bằng MCTS + model hiện tại, có Dirichlet noise ở gốc để
+    tăng khám phá)
         -> thu thập dữ liệu (state, policy_target, value_target)
         -> huấn luyện mạng neural trên dữ liệu vừa thu được
-        -> lặp lại với model đã cập nhật.
+        -> đấu loại (gating): candidate vừa train phải thắng đủ áp đảo "best" hiện tại
+           mới được công nhận là best mới, tránh thoái hóa âm thầm
+        -> lặp lại.
 
 Cách chạy:
     python train.py                              # dùng tham số mặc định
     python train.py --iterations 20 --games 8 --simulations 60
+    python train.py --iterations 40 --games 15 --simulations 40 --epochs 6 --batch-size 64
+
+Mỗi iteration ghi thêm log vào checkpoint_dir:
+    training_metrics.csv    - loss (total/value/policy) + buffer size, theo từng bước gradient
+    iteration_metrics.csv   - độ dài ván self-play trung bình + kết quả đấu loại, theo iteration
+Vẽ biểu đồ từ 2 file này bằng plot_training_curves.py.
 """
+import os
 import sys
+import csv
 import random
+import shutil
 import argparse
+from pathlib import Path
 from collections import deque
 
 import numpy as np
@@ -32,6 +45,52 @@ sys.stderr.reconfigure(encoding="utf-8")
 from board import board_to_tensor, ACTION_SPACE_SIZE
 from model import ChessNet, save_checkpoint, load_checkpoint, find_latest_checkpoint
 from mcts import mcts_search
+from agents import MCTSAgent
+from arena import play_match
+
+
+def log_row(csv_path, row, header):
+    """Append 1 dòng vào file CSV, tự ghi header nếu file chưa tồn tại."""
+    write_header = not os.path.isfile(csv_path)
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if write_header:
+            writer.writerow(header)
+        writer.writerow(row)
+
+
+def evaluate_and_promote(candidate_path, best_path, num_simulations, eval_games=10, win_threshold=0.55):
+    """
+    Đấu loại (gating) kiểu AlphaZero gốc: model vừa train (candidate) phải đấu với
+    model tốt nhất đã được công nhận trước đó (best) và thắng đủ áp đảo (mặc định
+    >=55% điểm số) mới được "thăng chức" thành best mới. Nếu không, best cũ được
+    giữ nguyên - tránh tình trạng model bị thoái hóa (quên mất cái đã học tốt) mà
+    không ai nhận ra vì train.py cứ lưu checkpoint mới nhất vô điều kiện.
+
+    Trả về (promoted: bool, win_rate: float | None). win_rate=None khi chưa có best
+    để so sánh (lần đầu tiên).
+    """
+    if not Path(best_path).exists():
+        shutil.copy(candidate_path, best_path)
+        print(f"Chưa có model best trước đó, dùng luôn {candidate_path} làm best.")
+        return True, None
+
+    candidate = MCTSAgent(checkpoint_path=candidate_path, num_simulations=num_simulations, name="candidate")
+    best = MCTSAgent(checkpoint_path=best_path, num_simulations=num_simulations, name="best")
+
+    print(f"Đấu loại: candidate ({Path(candidate_path).name}) vs best ({Path(best_path).name}), "
+          f"{eval_games} ván...")
+    results = play_match(candidate, best, num_games=eval_games, verbose=False)
+    win_rate = results["win_rate_a"]
+    print(f"Win rate candidate: {win_rate*100:.1f}% (ngưỡng để thắng: {win_threshold*100:.0f}%)")
+
+    if win_rate >= win_threshold:
+        shutil.copy(candidate_path, best_path)
+        print("-> Candidate THẮNG, cập nhật best_checkpoint.pt")
+        return True, win_rate
+
+    print("-> Candidate chưa đủ mạnh, GIỮ NGUYÊN best cũ cho self-play vòng sau.")
+    return False, win_rate
 
 
 class ReplayBuffer:
@@ -63,6 +122,11 @@ def self_play_game(model, num_simulations=50, max_moves=200, temperature_moves=1
     temperature_moves: số nước đầu tiên dùng temperature=1 (lấy mẫu theo visit_count)
     để tăng đa dạng/khám phá; các nước sau dùng temperature=0 (chọn nước tốt nhất) để
     mô phỏng lối chơi "nghiêm túc" hơn về cuối ván - đúng theo thông lệ AlphaZero.
+
+    add_root_noise=True ở lời gọi mcts_search bên dưới: CHỈ self-play mới bật Dirichlet
+    noise ở node gốc (xem giải thích đầy đủ trong mcts.py) - run_web.py (AI đánh thật
+    với người) và agents.py (đánh giá/đấu loại) KHÔNG bật, để AI chơi "nghiêm túc" khi
+    đối mặt thật sự, chỉ thêm nhiễu lúc tự sinh dữ liệu huấn luyện.
     """
     board = chess.Board()
     history = []  # [(state_tensor, policy_target, bên_đi_lúc_đó), ...]
@@ -80,6 +144,7 @@ def self_play_game(model, num_simulations=50, max_moves=200, temperature_moves=1
             num_simulations=num_simulations,
             temperature=temperature,
             return_policy=True,
+            add_root_noise=True,
         )
 
         history.append((board_to_tensor(board), policy_target, board.turn))
@@ -141,19 +206,27 @@ def train(
     checkpoint_dir="checkpoints",
     checkpoint_every=1,
     resume=True,
+    eval_games=10,
+    win_threshold=0.55,
 ):
     """
-    Mỗi iteration gồm 2 giai đoạn:
+    Mỗi iteration gồm 3 giai đoạn:
       1. Self-play: chơi `games_per_iteration` ván bằng model hiện tại để lấy dữ liệu mới
+         (có Dirichlet noise ở gốc để tăng khám phá - xem self_play_game)
       2. Học: lấy mẫu từ buffer, chạy `epochs_per_iteration` bước gradient để cập nhật model
+      3. Đấu loại (gating): candidate vừa train đấu với best_checkpoint.pt hiện có;
+         chỉ "thăng chức" nếu thắng đủ áp đảo (win_threshold) - xem evaluate_and_promote
 
-    Đây là bản đơn giản hoá (chạy tuần tự, 1 model, không có bước evaluation model
-    mới-vs-cũ như AlphaZero gốc) - phù hợp để demo/thử nghiệm trên máy cá nhân. Muốn
-    huấn luyện ra 1 engine chơi tốt cần chạy rất nhiều iteration/game hơn nữa và nhiều
-    thời gian/tài nguyên tính toán hơn đáng kể so với các giá trị mặc định ở đây.
+    Đây vẫn là bản đơn giản hoá so với AlphaZero gốc (self-play ở bước 1 dùng model
+    ĐANG TRAIN, không phải best_checkpoint.pt đã qua gating - việc đổi self-play sang
+    dùng best model là bước nâng cấp tiếp theo, chưa làm ở bản này để tránh thay đổi
+    quá nhiều luồng dữ liệu cùng lúc). Muốn huấn luyện ra 1 engine chơi tốt cần chạy
+    rất nhiều iteration/game hơn nữa và nhiều thời gian/tài nguyên tính toán hơn đáng
+    kể so với các giá trị mặc định ở đây.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Thiết bị: {device}")
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     model = ChessNet().to(device)
     # weight_decay nhỏ giúp giảm overfitting, theo thông lệ huấn luyện AlphaZero
@@ -168,15 +241,20 @@ def train(
             start_iteration = last_iter + 1
             print(f"Tiếp tục huấn luyện từ checkpoint: {latest} (iteration {start_iteration})")
 
+    training_metrics_path = os.path.join(checkpoint_dir, "training_metrics.csv")
+    iteration_metrics_path = os.path.join(checkpoint_dir, "iteration_metrics.csv")
+
     for iteration in range(start_iteration, start_iteration + num_iterations):
         # ----- Giai đoạn Self-play -----
         model.eval()  # self-play chỉ dùng để suy luận, không cập nhật thống kê BatchNorm
+        iteration_game_lengths = []
         for game_idx in range(games_per_iteration):
             game_data = self_play_game(
                 model, num_simulations=num_simulations,
                 max_moves=max_moves, temperature_moves=temperature_moves,
             )
             buffer.push(game_data)
+            iteration_game_lengths.append(len(game_data))
             print(f"[Iter {iteration}] Ván {game_idx + 1}/{games_per_iteration}: "
                   f"{len(game_data)} nước đi | buffer={len(buffer)}")
 
@@ -194,10 +272,32 @@ def train(
             optimizer.step()
             print(f"[Iter {iteration}] Epoch {epoch + 1}/{epochs_per_iteration}: "
                   f"loss={loss.item():.4f} (value={v_loss:.4f}, policy={p_loss:.4f})")
+            log_row(
+                training_metrics_path,
+                [iteration, epoch + 1, loss.item(), v_loss, p_loss, len(buffer)],
+                header=["iteration", "epoch", "total_loss", "value_loss", "policy_loss", "buffer_size"],
+            )
 
+        # ----- Lưu checkpoint + đấu loại (gating) -----
         if iteration % checkpoint_every == 0:
             path = save_checkpoint(model, optimizer, iteration, checkpoint_dir)
             print(f"Đã lưu checkpoint: {path}")
+
+            best_path = os.path.join(checkpoint_dir, "best_checkpoint.pt")
+            promoted, win_rate = evaluate_and_promote(
+                path, best_path, num_simulations=num_simulations,
+                eval_games=eval_games, win_threshold=win_threshold,
+            )
+            print(f"Gating: {'THĂNG CHỨC' if promoted else 'giữ nguyên best cũ'} "
+                  f"(win_rate={win_rate if win_rate is not None else 'N/A'})")
+
+            avg_len = (sum(iteration_game_lengths) / len(iteration_game_lengths)
+                       if iteration_game_lengths else 0)
+            log_row(
+                iteration_metrics_path,
+                [iteration, avg_len, len(buffer), win_rate if win_rate is not None else ""],
+                header=["iteration", "avg_game_length", "buffer_size", "eval_win_rate"],
+            )
 
     print("Hoàn tất huấn luyện.")
     return model
@@ -213,6 +313,10 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3, help="Tốc độ học")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Thư mục lưu checkpoint")
     parser.add_argument("--no-resume", action="store_true", help="Huấn luyện lại từ đầu, không tải checkpoint cũ")
+    parser.add_argument("--eval-games", type=int, default=10, help="Số ván đấu loại (gating) mỗi iteration")
+    parser.add_argument("--win-threshold", type=float, default=0.55,
+                         help="Tỉ lệ điểm tối thiểu để candidate được thăng chức thành best")
+    parser.add_argument("--checkpoint-every", type=int, default=1, help="Lưu checkpoint + đấu loại mỗi N iteration")
     args = parser.parse_args()
 
     train(
@@ -224,4 +328,6 @@ if __name__ == "__main__":
         lr=args.lr,
         checkpoint_dir=args.checkpoint_dir,
         resume=not args.no_resume,
+        eval_games=args.eval_games,
+        win_threshold=args.win_threshold,
     )
