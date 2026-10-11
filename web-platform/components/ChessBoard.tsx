@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Chess, type Square } from "chess.js";
-import { Badge, Group, Stack, Text } from "@mantine/core";
+import { Badge, Group, SegmentedControl, Stack, Text } from "@mantine/core";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
@@ -10,11 +10,18 @@ const PIECE_UNICODE: Record<string, Record<string, string>> = {
   w: { p: "♙", n: "♘", b: "♗", r: "♖", q: "♕", k: "♔" },
   b: { p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚" },
 };
+const AI_SERVICE_URL = "http://localhost:8000";
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function ChessBoard() {
   const game = useMemo(() => new Chess(), []);
   const [version, setVersion] = useState(0);
   const [selected, setSelected] = useState<Square | null>(null);
+  const [aiThinking, setAiThinking] = useState(false);
+  const [humanColor, setHumanColor] = useState<"w" | "b">("w");
 
   const legalTargets = useMemo(() => {
     if (!selected) return [];
@@ -22,13 +29,48 @@ export function ChessBoard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, version]);
 
+  async function requestAiMove() {
+    if (game.isGameOver()) return;
+    setAiThinking(true);
+    try {
+      const fetchPromise = fetch(`${AI_SERVICE_URL}/ai-move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fen: game.fen(), simulations: 15 }),
+      }).then((res) => {
+        if (!res.ok) throw new Error(`AI service lỗi: ${res.status}`);
+        return res.json() as Promise<{ move: string }>;
+      });
+
+      // Đảm bảo AI "suy nghĩ" tối thiểu 1 giây cho tự nhiên, dù API trả nhanh hơn
+      const [data] = await Promise.all([fetchPromise, delay(1000)]);
+
+      const from = data.move.slice(0, 2) as Square;
+      const to = data.move.slice(2, 4) as Square;
+      const promotion = data.move.slice(4, 5) || undefined;
+
+      game.move({ from, to, promotion });
+      setVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Không gọi được AI service:", err);
+    } finally {
+      setAiThinking(false);
+    }
+  }
+
   function handleSquareClick(square: Square) {
+    if (game.turn() !== humanColor || aiThinking) return;
+
     if (selected && legalTargets.includes(square)) {
-      game.move({ from: selected, to: square, promotion: "q" });
+      const move = game.move({ from: selected, to: square, promotion: "q" });
       setSelected(null);
       setVersion((v) => v + 1);
+      if (move && !game.isGameOver()) {
+        requestAiMove();
+      }
       return;
     }
+
     const piece = game.get(square);
     if (piece && piece.color === game.turn()) {
       setSelected(square);
@@ -37,22 +79,41 @@ export function ChessBoard() {
     }
   }
 
+  function handleNewGame(color: "w" | "b") {
+    game.reset();
+    setHumanColor(color);
+    setSelected(null);
+    setVersion((v) => v + 1);
+    if (color === "b") {
+      requestAiMove(); // AI cầm Trắng, đi trước
+    }
+  }
+
   const status = useMemo(() => {
     if (game.isCheckmate())
       return `Chiếu bí! ${game.turn() === "w" ? "Đen" : "Trắng"} thắng.`;
     if (game.isDraw()) return "Hòa cờ.";
+    if (aiThinking) return "AI đang suy nghĩ...";
     if (game.isCheck())
       return `${game.turn() === "w" ? "Trắng" : "Đen"} đang bị chiếu.`;
     return `Đến lượt ${game.turn() === "w" ? "Trắng" : "Đen"}.`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version]);
+  }, [version, aiThinking]);
 
   const board = game.board();
 
   return (
     <Stack align="center" gap="md">
+      <SegmentedControl
+        value={humanColor}
+        onChange={(value) => handleNewGame(value as "w" | "b")}
+        data={[
+          { label: "Bạn cầm quân Trắng", value: "w" },
+          { label: "Bạn cầm quân Đen", value: "b" },
+        ]}
+      />
       <Group>
-        <Badge color="blue">2 người (offline)</Badge>
+        <Badge color="grape">Đấu với AI</Badge>
         <Text fw={600}>{status}</Text>
       </Group>
 
