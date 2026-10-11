@@ -12,3 +12,9 @@ venv/
 *.pkl
 data/
 logs/
+
+node_modules/
+.next/
+dist/
+build/
+*.log
