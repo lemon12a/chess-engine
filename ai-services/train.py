@@ -34,6 +34,22 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
+class Tee:
+    """Ghi đồng thời ra console và file log, luôn ở UTF-8 - không phụ thuộc
+    vào encoding mặc định của PowerShell/cmd (vốn hay là UTF-16LE trên Windows,
+    gây lỗi hiển thị tiếng Việt khi dùng `| tee`)."""
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
 # Trên Windows, khi stdout không gắn trực tiếp với console (bị bọc trong
 # Measure-Command, hoặc pipe qua Tee-Object/redirect ra file,...), Python tự
 # động dùng bảng mã hệ thống cũ (cp1252) thay vì UTF-8, gây lỗi UnicodeEncodeError
@@ -330,4 +346,5 @@ if __name__ == "__main__":
         resume=not args.no_resume,
         eval_games=args.eval_games,
         win_threshold=args.win_threshold,
+        checkpoint_every=args.checkpoint_every,
     )
