@@ -19,6 +19,7 @@ Mỗi iteration ghi thêm log vào checkpoint_dir:
     iteration_metrics.csv   - độ dài ván self-play trung bình + kết quả đấu loại, theo iteration
 Vẽ biểu đồ từ 2 file này bằng plot_training_curves.py.
 """
+import re
 import os
 import sys
 import csv
@@ -33,6 +34,18 @@ import chess
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+
+def get_next_run_number(checkpoint_dir):
+    """Tự tìm số thứ tự lần chạy tiếp theo, dựa vào các file training_log*.txt đã
+    có trong checkpoint_dir. Không cần file đếm riêng."""
+    pattern = re.compile(r"training_log(\d+)\.txt$")
+    existing = []
+    if os.path.isdir(checkpoint_dir):
+        for name in os.listdir(checkpoint_dir):
+            m = pattern.match(name)
+            if m:
+                existing.append(int(m.group(1)))
+    return max(existing, default=0) + 1
 
 class Tee:
     """Ghi đồng thời ra console và file log, luôn ở UTF-8 - không phụ thuộc
@@ -224,6 +237,7 @@ def train(
     resume=True,
     eval_games=10,
     win_threshold=0.55,
+    run_number=1,
 ):
     """
     Mỗi iteration gồm 3 giai đoạn:
@@ -257,8 +271,8 @@ def train(
             start_iteration = last_iter + 1
             print(f"Tiếp tục huấn luyện từ checkpoint: {latest} (iteration {start_iteration})")
 
-    training_metrics_path = os.path.join(checkpoint_dir, "training_metrics.csv")
-    iteration_metrics_path = os.path.join(checkpoint_dir, "iteration_metrics.csv")
+    training_metrics_path = os.path.join(checkpoint_dir, f"training_metrics{run_number}.csv")
+    iteration_metrics_path = os.path.join(checkpoint_dir, f"iteration_metrics{run_number}.csv")
 
     for iteration in range(start_iteration, start_iteration + num_iterations):
         # ----- Giai đoạn Self-play -----
@@ -326,6 +340,7 @@ if __name__ == "__main__":
     parser.add_argument("--simulations", type=int, default=40, help="Số simulation MCTS mỗi nước đi")
     parser.add_argument("--epochs", type=int, default=4, help="Số bước gradient mỗi vòng lặp")
     parser.add_argument("--batch-size", type=int, default=32, help="Kích thước batch huấn luyện")
+    parser.add_argument("--buffer-capacity", type=int, default=20000, help="Dung lượng tối đa của replay buffer")
     parser.add_argument("--lr", type=float, default=1e-3, help="Tốc độ học")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Thư mục lưu checkpoint")
     parser.add_argument("--no-resume", action="store_true", help="Huấn luyện lại từ đầu, không tải checkpoint cũ")
@@ -333,7 +348,18 @@ if __name__ == "__main__":
     parser.add_argument("--win-threshold", type=float, default=0.55,
                          help="Tỉ lệ điểm tối thiểu để candidate được thăng chức thành best")
     parser.add_argument("--checkpoint-every", type=int, default=1, help="Lưu checkpoint + đấu loại mỗi N iteration")
+    parser.add_argument("--run", type=int, default=None,
+                         help="Số thứ tự lần chạy (mặc định: tự tăng dựa vào file log đã có)")
     args = parser.parse_args()
+
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    run_number = args.run if args.run is not None else get_next_run_number(args.checkpoint_dir)
+    print(f"Lần chạy số: {run_number}")
+
+    log_path = os.path.join(args.checkpoint_dir, f"training_log{run_number}.txt")
+    log_file = open(log_path, "a", encoding="utf-8")
+    sys.stdout = Tee(sys.stdout, log_file)
+    sys.stderr = Tee(sys.stderr, log_file)
 
     train(
         num_iterations=args.iterations,
@@ -347,4 +373,6 @@ if __name__ == "__main__":
         eval_games=args.eval_games,
         win_threshold=args.win_threshold,
         checkpoint_every=args.checkpoint_every,
+        buffer_capacity=args.buffer_capacity,
+        run_number=run_number,
     )
