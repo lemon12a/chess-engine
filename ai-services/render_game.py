@@ -1,10 +1,9 @@
 """render_game.py — chuyển 1 file PGN thành chuỗi ảnh SVG bàn cờ.
 
-Cách nhanh hơn (không cần script này): mở file .pgn, copy toàn bộ nội dung,
-dán vào https://lichess.org/paste — ra bàn cờ tương tác, tua từng nước.
-Dùng script này khi cần ảnh TĨNH offline (vd chèn vào slide báo cáo).
+Cách nhanh hơn (không cần script này): mở file .pgn, copy nội dung, dán vào
+https://lichess.org/paste — ra bàn cờ tương tác, tua từng nước.
 
-Chạy: python render_game.py games/xxx.pgn --every 5
+Chạy: python render_game.py ../results/games/xxx.pgn --every 5
 """
 import argparse
 import os

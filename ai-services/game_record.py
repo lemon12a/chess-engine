@@ -2,11 +2,15 @@
 (hoặc dán thẳng vào https://lichess.org/paste để xem lại tương tác, tua từng nước)."""
 import os
 import time
+from pathlib import Path
 import chess
 import chess.pgn
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_GAMES_DIR = str(SCRIPT_DIR.parent / "results" / "games")
 
-def save_pgn(moves, white_name, black_name, result, out_dir="games"):
+
+def save_pgn(moves, white_name, black_name, result, out_dir=DEFAULT_GAMES_DIR):
     os.makedirs(out_dir, exist_ok=True)
     game = chess.pgn.Game()
     game.headers["White"] = white_name

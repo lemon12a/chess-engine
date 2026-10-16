@@ -9,6 +9,7 @@ import argparse
 import glob
 import os
 import re
+from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
@@ -17,8 +18,12 @@ import matplotlib.pyplot as plt
 from agents import RandomAgent, GreedyMaterialAgent, MCTSAgent
 from arena import play_match
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CHECKPOINT_DIR = str(SCRIPT_DIR.parent / "results" / "checkpoints")
+DEFAULT_OUT = str(SCRIPT_DIR.parent / "results" / "training_progress.png")
 
-def list_checkpoints(checkpoint_dir="checkpoints"):
+
+def list_checkpoints(checkpoint_dir):
     files = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pt"))
     def extract_iter(path):
         m = re.search(r"checkpoint_(\d+)\.pt", path)
@@ -28,11 +33,11 @@ def list_checkpoints(checkpoint_dir="checkpoints"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint-dir", default="checkpoints")
+    parser.add_argument("--checkpoint-dir", default=DEFAULT_CHECKPOINT_DIR)
     parser.add_argument("--baseline", choices=["random", "greedy"], default="random")
     parser.add_argument("--games-per-checkpoint", type=int, default=10)
     parser.add_argument("--simulations", type=int, default=30)
-    parser.add_argument("--out", default="training_progress.png")
+    parser.add_argument("--out", default=DEFAULT_OUT)
     args = parser.parse_args()
 
     checkpoints = list_checkpoints(args.checkpoint_dir)
@@ -73,6 +78,9 @@ def main():
     ax2.grid(alpha=0.3)
 
     plt.tight_layout()
+    out_dir = os.path.dirname(args.out)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     plt.savefig(args.out, dpi=150)
     print(f"\nĐã lưu biểu đồ: {args.out}")
 

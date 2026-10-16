@@ -1,14 +1,21 @@
-"""Vẽ đầy đủ đường cong huấn luyện từ checkpoints/training_metrics.csv +
-checkpoints/iteration_metrics.csv (2 file này do train.py tự ghi trong lúc chạy).
+"""Vẽ đường cong huấn luyện (loss, buffer, độ dài ván, gating) cho 1 lần chạy cụ thể,
+đọc từ ../results/training_<N>/training_metrics.csv + iteration_metrics.csv.
 
-Chạy: python plot_training_curves.py
+Chạy: python plot_training_curves.py              # tự lấy lần chạy mới nhất
+      python plot_training_curves.py --run 2       # chỉ định lần chạy số 2
 """
 import argparse
 import csv
 import os
+import re
+from pathlib import Path
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_RESULTS_DIR = str(SCRIPT_DIR.parent / "results")
 
 
 def read_csv(path):
@@ -18,16 +25,34 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def get_latest_run(results_dir):
+    pattern = re.compile(r"training_(\d+)$")
+    existing = []
+    if os.path.isdir(results_dir):
+        for name in os.listdir(results_dir):
+            m = pattern.match(name)
+            if m and os.path.isdir(os.path.join(results_dir, name)):
+                existing.append(int(m.group(1)))
+    return max(existing) if existing else None
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint-dir", default="checkpoints")
-    parser.add_argument("--out", default="training_curves.png")
+    parser.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--run", type=int, default=None, help="Lần chạy muốn vẽ (mặc định: mới nhất)")
     args = parser.parse_args()
 
-    step_rows = read_csv(os.path.join(args.checkpoint_dir, "training_metrics.csv"))
-    iter_rows = read_csv(os.path.join(args.checkpoint_dir, "iteration_metrics.csv"))
+    run = args.run or get_latest_run(args.results_dir)
+    if run is None:
+        print(f"Không tìm thấy thư mục training_<N> nào trong {args.results_dir}")
+        return
+
+    run_dir = os.path.join(args.results_dir, f"training_{run}")
+    step_rows = read_csv(os.path.join(run_dir, "training_metrics.csv"))
+    iter_rows = read_csv(os.path.join(run_dir, "iteration_metrics.csv"))
     if not step_rows:
-        print("Chưa có training_metrics.csv — cần chạy train.py bản đã log_row trước (train.py mới).")
+        print(f"Chưa có training_metrics.csv trong {run_dir} — train.py đã chạy xong ít nhất "
+              f"1 epoch cho lần chạy này chưa?")
         return
 
     steps = list(range(1, len(step_rows) + 1))
@@ -43,7 +68,7 @@ def main():
     axes[0, 0].plot(steps, policy_loss, label="Policy", color="tab:blue")
     axes[0, 0].set_xlabel("Bước gradient")
     axes[0, 0].set_ylabel("Loss")
-    axes[0, 0].set_title("Loss theo bước huấn luyện")
+    axes[0, 0].set_title(f"Loss — lần chạy {run}")
     axes[0, 0].legend()
     axes[0, 0].grid(alpha=0.3)
 
@@ -75,8 +100,9 @@ def main():
             axes[1, 1].grid(alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(args.out, dpi=150)
-    print(f"Đã lưu: {args.out}")
+    out_path = os.path.join(run_dir, "training_curves.png")
+    plt.savefig(out_path, dpi=150)
+    print(f"Đã lưu: {out_path}")
 
 
 if __name__ == "__main__":

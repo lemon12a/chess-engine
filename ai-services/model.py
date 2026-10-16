@@ -1,19 +1,22 @@
 # model.py
 """
-File này BỊ THIẾU trong bộ code bạn gửi (board.py, main.py, mcts.py, train.py đều import
-từ `model` nhưng không có file model.py nào được tải lên) - đây là file mình viết bổ sung
-để cả pipeline chạy được.
-
 Kiến trúc: ResNet thu nhỏ (6 residual block x 64 filter) thay vì 19-40 block x 256 filter
 như AlphaZero gốc, để vừa VRAM của GPU laptop tầm trung (GTX 1650/1660, RTX 3050, ~4-6GB).
 Nếu sau này thấy GPU còn dư nhiều bộ nhớ, có thể tăng NUM_RES_BLOCKS/NUM_FILTERS ở dưới.
 """
 import os
 import glob
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+# Đường dẫn checkpoint mặc định tính TƯƠNG ĐỐI THEO VỊ TRÍ FILE NÀY (model.py),
+# không phụ thuộc bạn đứng ở thư mục nào khi chạy script - tránh lặp lại lỗi
+# "tìm không thấy checkpoints" do chạy nhầm cwd đã gặp trước đây.
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CHECKPOINT_DIR = str(SCRIPT_DIR.parent / "results" / "checkpoints")
 
 # Phải khớp với board.py: 12 plane quân cờ + 1 plane lượt đi (xem giải thích trong
 # board_to_tensor()) = 13 kênh đầu vào.
@@ -85,7 +88,7 @@ class ChessNet(nn.Module):
         return policy_logits, value
 
 
-def save_checkpoint(model, optimizer, iteration, checkpoint_dir="checkpoints"):
+def save_checkpoint(model, optimizer, iteration, checkpoint_dir=DEFAULT_CHECKPOINT_DIR):
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f"checkpoint_{iteration:05d}.pt")
     torch.save({
@@ -109,7 +112,7 @@ def load_checkpoint(path, model, optimizer=None, device="cpu"):
     return checkpoint.get("iteration", 0)
 
 
-def find_latest_checkpoint(checkpoint_dir="checkpoints"):
+def find_latest_checkpoint(checkpoint_dir=DEFAULT_CHECKPOINT_DIR):
     if not os.path.isdir(checkpoint_dir):
         return None
     files = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pt"))

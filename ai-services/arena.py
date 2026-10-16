@@ -3,20 +3,26 @@ arena.py — đấu 2 agent để đo hiệu năng tương đối.
 
 Ví dụ chạy:
     python arena.py --agent1 random --agent2 greedy --games 20
-    python arena.py --agent1 checkpoints/checkpoint_00005.pt --sim1 50 \
-                     --agent2 checkpoints/checkpoint_00010.pt --sim2 50 --games 20
-    python arena.py --agent1 checkpoints/best_checkpoint.pt --agent2 random \
-                     --games 10 --save-games --csv-out progress.csv
+    python arena.py --agent1 ../results/checkpoints/checkpoint_00005.pt --sim1 50 \
+                     --agent2 ../results/checkpoints/checkpoint_00010.pt --sim2 50 --games 20
+    python arena.py --agent1 ../results/checkpoints/best_checkpoint.pt --agent2 random \
+                     --games 10 --save-games
 """
 import argparse
 import csv
 import math
+import os
 import time
 from pathlib import Path
 
 import chess
 
 from agents import RandomAgent, GreedyMaterialAgent, MCTSAgent
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_RESULTS_DIR = SCRIPT_DIR.parent / "results"
+DEFAULT_GAMES_DIR = str(DEFAULT_RESULTS_DIR / "games")
+DEFAULT_CSV_OUT = str(DEFAULT_RESULTS_DIR / "progress.csv")
 
 
 def play_single_game(agent_white, agent_black, max_moves=200):
@@ -40,11 +46,8 @@ def play_single_game(agent_white, agent_black, max_moves=200):
 
 
 def play_match(agent_a, agent_b, num_games=20, max_moves=200, verbose=True,
-                save_games=False, games_dir="games"):
-    """Đổi màu mỗi ván để loại bỏ lợi thế đi trước khỏi kết quả so sánh.
-    save_games=True: lưu từng ván dạng PGN vào games_dir (xem game_record.py),
-    dán PGN vào https://lichess.org/paste để xem lại tương tác, hoặc dùng
-    render_game.py để xuất ảnh SVG offline."""
+                save_games=False, games_dir=DEFAULT_GAMES_DIR):
+    """Đổi màu mỗi ván để loại bỏ lợi thế đi trước khỏi kết quả so sánh."""
     results = {"a_wins": 0, "b_wins": 0, "draws": 0}
 
     for game_idx in range(num_games):
@@ -107,9 +110,10 @@ def main():
     parser.add_argument("--sim2", type=int, default=50)
     parser.add_argument("--games", type=int, default=20)
     parser.add_argument("--max-moves", type=int, default=200)
-    parser.add_argument("--csv-out", type=str, default=None)
-    parser.add_argument("--save-games", action="store_true", help="Lưu PGN từng ván vào games/")
-    parser.add_argument("--games-dir", type=str, default="games")
+    parser.add_argument("--csv-out", type=str, default=DEFAULT_CSV_OUT)
+    parser.add_argument("--no-csv", action="store_true", help="Không ghi CSV")
+    parser.add_argument("--save-games", action="store_true", help="Lưu PGN từng ván")
+    parser.add_argument("--games-dir", type=str, default=DEFAULT_GAMES_DIR)
     args = parser.parse_args()
 
     agent_a = build_agent(args.agent1, args.sim1)
@@ -128,16 +132,20 @@ def main():
     if args.save_games:
         print(f"Đã lưu PGN từng ván vào: {args.games_dir}/")
 
-    if args.csv_out:
-        write_header = not Path(args.csv_out).exists()
-        with open(args.csv_out, "a", newline="", encoding="utf-8") as f:
+    if not args.no_csv:
+        csv_path = args.csv_out
+        out_dir = os.path.dirname(csv_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        write_header = not Path(csv_path).exists()
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             if write_header:
                 writer.writerow(["agent_a", "agent_b", "games", "a_wins", "b_wins", "draws", "win_rate_a", "elo_diff"])
             writer.writerow([agent_a.name, agent_b.name, args.games, results["a_wins"],
                               results["b_wins"], results["draws"],
                               f"{results['win_rate_a']:.4f}", f"{results['elo_diff']:.1f}"])
-        print(f"\nĐã ghi vào {args.csv_out}")
+        print(f"\nĐã ghi vào {csv_path}")
 
 
 if __name__ == "__main__":

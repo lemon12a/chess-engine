@@ -1,5 +1,5 @@
 """benchmark_speed.py — đo tốc độ self-play thật trên máy này, dùng để tính
---iterations/--games phù hợp cho 1 phiên train (vd qua đêm).
+--iterations/--games phù hợp cho 1 phiên train.
 
 Chạy: python benchmark_speed.py
 """
