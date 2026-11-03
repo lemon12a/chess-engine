@@ -5,6 +5,7 @@ import {
   mantineHtmlProps,
 } from "@mantine/core";
 import { Header } from "@/components/Header";
+import { theme } from "@/lib/theme";
 
 export const metadata = {
   title: "Cờ Vua Online",
@@ -19,10 +20,10 @@ export default function RootLayout({
   return (
     <html lang="vi" {...mantineHtmlProps}>
       <head>
-        <ColorSchemeScript />
+        <ColorSchemeScript defaultColorScheme="dark" />
       </head>
       <body>
-        <MantineProvider>
+        <MantineProvider theme={theme} defaultColorScheme="dark">
           <Header />
           {children}
         </MantineProvider>
