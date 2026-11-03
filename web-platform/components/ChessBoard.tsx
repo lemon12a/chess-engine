@@ -6,10 +6,8 @@ import { Badge, Group, SegmentedControl, Stack, Text } from "@mantine/core";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
-const PIECE_UNICODE: Record<string, Record<string, string>> = {
-  w: { p: "♙", n: "♘", b: "♗", r: "♖", q: "♕", k: "♔" },
-  b: { p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚" },
-};
+// Đổi bộ quân ở đây: "cburnett" | "chessnut" | "merida"
+const PIECE_SET = "cburnett";
 const AI_SERVICE_URL = "http://localhost:8000";
 
 function delay(ms: number) {
@@ -204,17 +202,19 @@ export function ChessBoard() {
                   </span>
                 )}
                 {piece && (
-                  <span
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/pieces/${PIECE_SET}/${piece.color}${piece.type.toUpperCase()}.svg`}
+                    alt={`${piece.color}${piece.type}`}
+                    draggable={false}
                     style={{
                       position: "relative",
                       zIndex: 2,
-                      fontVariantEmoji: "text",
-                      fontFamily:
-                        "'Segoe UI Symbol', 'Noto Sans Symbols 2', 'Arial Unicode MS', sans-serif",
+                      width: "88%",
+                      height: "88%",
+                      pointerEvents: "none",
                     }}
-                  >
-                    {PIECE_UNICODE[piece.color][piece.type]}
-                  </span>
+                  />
                 )}
               </div>
             );
