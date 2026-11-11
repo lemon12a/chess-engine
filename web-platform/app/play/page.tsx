@@ -17,7 +17,7 @@ export default async function PlayPage({
       <ChessBoard
         key={`${humanColor}-${selectedLevel.id}`}
         humanColor={humanColor}
-        simulations={selectedLevel.simulations}
+        levelId={selectedLevel.id}
         levelLabel={selectedLevel.label}
       />
     </Container>

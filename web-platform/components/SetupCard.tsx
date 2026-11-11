@@ -66,8 +66,14 @@ export function SetupCard() {
             value={colorChoice}
             onChange={(value) => setColorChoice(value as ColorChoice)}
             data={[
-              { value: "w", label: <ColorLabel src={pieceSrc("w", "k")} text="Trắng" /> },
-              { value: "b", label: <ColorLabel src={pieceSrc("b", "k")} text="Đen" /> },
+              {
+                value: "w",
+                label: <ColorLabel src={pieceSrc("w", "k")} text="Trắng" />,
+              },
+              {
+                value: "b",
+                label: <ColorLabel src={pieceSrc("b", "k")} text="Đen" />,
+              },
               { value: "random", label: <ColorLabel text="Ngẫu nhiên" /> },
             ]}
           />
@@ -75,7 +81,7 @@ export function SetupCard() {
 
         <Stack gap={6}>
           <Text size="sm" fw={600}>
-            Độ sâu tìm kiếm của AI
+            Độ khó
           </Text>
           <SegmentedControl
             fullWidth
@@ -83,10 +89,11 @@ export function SetupCard() {
             onChange={setLevelId}
             data={LEVELS.map((item) => ({ value: item.id, label: item.label }))}
           />
-          <Text size="xs" c="dimmed">
-            {level.simulations} lần mô phỏng MCTS mỗi nước đi. Càng cao AI nghĩ
-            càng lâu.
-          </Text>
+          {level.elo ? (
+            <Text size="xs" c="dimmed">
+              Sức mạnh ước tính: ~{level.elo} Elo
+            </Text>
+          ) : null}
         </Stack>
 
         <Button size="md" onClick={handleStart}>
