@@ -16,7 +16,7 @@ import {
   Text,
 } from "@mantine/core";
 import { authClient } from "@/lib/auth-client";
-import { getAiParams } from "@/lib/levels";
+// import { getAiParams } from "@/lib/levels";
 import { findKingSquare } from "@/lib/chess/board";
 import { analyzeMaterial } from "@/lib/chess/material";
 import { getGameStatus } from "@/lib/chess/outcome";
