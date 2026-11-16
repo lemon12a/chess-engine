@@ -12,6 +12,8 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  // Plugin Anonymous của better-auth: true với tài khoản khách.
+  isAnonymous: boolean("is_anonymous").default(false),
 });
 
 export const session = pgTable(
