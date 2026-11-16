@@ -25,7 +25,7 @@ type NavItem = { label: string; href: string; soon?: boolean };
 // Mục có `soon: true` chưa có trang thật. Làm xong trang nào thì xoá `soon` ở mục đó.
 const NAV_ITEMS: NavItem[] = [
   { label: "Chơi", href: "/" },
-  { label: "Xem trực tiếp", href: "/watch", soon: true },
+  { label: "Xem trực tiếp", href: "/watch" },
   { label: "Lịch sử ván đấu", href: "/history", soon: true },
   { label: "Mô hình AI", href: "/model", soon: true },
 ];
@@ -131,6 +131,8 @@ export function Header() {
   const pathname = usePathname();
   const { data: session, isPending } = authClient.useSession();
   const [drawerOpened, { toggle, close }] = useDisclosure(false);
+  // Khách (tài khoản ẩn danh) có phiên nhưng chưa phải thành viên.
+  const member = session && !session.user.isAnonymous ? session.user : null;
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -167,10 +169,15 @@ export function Header() {
             </Group>
 
             <Group gap="xs" wrap="nowrap" visibleFrom="sm">
-              {isPending ? null : session ? (
-                <UserMenu name={session.user.name} onSignOut={handleSignOut} />
+              {isPending ? null : member ? (
+                <UserMenu name={member.name} onSignOut={handleSignOut} />
               ) : (
                 <>
+                  {session ? (
+                    <Text size="sm" c="dimmed">
+                      {session.user.name}
+                    </Text>
+                  ) : null}
                   <Button
                     component={Link}
                     href="/sign-in"
@@ -200,10 +207,10 @@ export function Header() {
         <Stack gap={4}>
           {renderNavItems(pathname, { onNavigate: close, fullWidth: true })}
           <Divider my="sm" />
-          {isPending ? null : session ? (
+          {isPending ? null : member ? (
             <>
               <Text size="sm" c="dimmed">
-                Đang đăng nhập: {session.user.name}
+                Đang đăng nhập: {member.name}
               </Text>
               <Button variant="default" onClick={handleSignOut} fullWidth>
                 Đăng xuất
@@ -211,6 +218,11 @@ export function Header() {
             </>
           ) : (
             <>
+              {session ? (
+                <Text size="sm" c="dimmed">
+                  Đang chơi với tư cách {session.user.name}
+                </Text>
+              ) : null}
               <Button
                 component={Link}
                 href="/sign-in"
