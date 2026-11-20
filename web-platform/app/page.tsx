@@ -1,12 +1,14 @@
 import { Container, Stack, Title } from "@mantine/core";
-import { ChessBoard } from "@/components/ChessBoard";
+import { Lobby } from "@/components/lobby/Lobby";
 
 export default function HomePage() {
   return (
-    <Container size="sm" py={40}>
-      <Stack align="center" gap="xl">
-        <Title order={1}>♟️ Cờ Vua Online</Title>
-        <ChessBoard />
+    <Container size="xs" py={40}>
+      <Stack gap="lg">
+        <Title order={1} ta="center">
+          Chơi cờ vua
+        </Title>
+        <Lobby />
       </Stack>
     </Container>
   );

@@ -16,3 +16,6 @@ A chess engine created by using Reinforced Learning
 pip install chess torch
 ```
 ### What it can do:
+
+### References:
+- Chess pieces: Colin M.L. Burnett's cburnett (GPLv2+) from Lichess.

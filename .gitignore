@@ -17,6 +17,11 @@ data/
 logs/
 *.ckpt
 checkpoints/
+*.csv
+*.png
+games/
+*.pgn
+training_log.txt
 
 # Node
 node_modules/

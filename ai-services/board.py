@@ -49,18 +49,6 @@ def board_to_tensor(board):
 def move_to_index(move):
     """
     Mã hóa nước đi thành chỉ số hành động duy nhất trong khoảng [0, ACTION_SPACE_SIZE).
-
-    - Nước đi thường (kể cả nhập thành, bắt tốt qua đường) và phong Hậu:
-        index = from_square * 64 + to_square   (nằm trong [0, 4095])
-
-    - Phong cấp Mã/Tượng/Xe (under-promotion):
-        BUG CŨ: bản gốc chỉ dùng from*64+to nên 4 nước phong Hậu/Mã/Tượng/Xe của CÙNG
-        một nước đi (cùng from, cùng to) bị gán CHUNG một index. Hệ quả: policy network
-        không có cách nào học để phân biệt "nên phong Hậu hay phong Mã/Tượng/Xe", vì cả
-        4 lựa chọn đọc chung 1 xác suất trong policy_logits.
-        FIX: mã hoá phong cấp khác Hậu vào vùng chỉ số riêng [4096, 4671], dựa trên
-        (loại quân phong, hướng đi, ô xuất phát), để mỗi nước đi hợp lệ có ĐÚNG MỘT
-        chỉ số duy nhất, không trùng với bất kỳ nước đi nào khác.
     """
     if move.promotion is not None and move.promotion != chess.QUEEN:
         piece_idx = UNDERPROMOTION_PIECES.index(move.promotion)  # 0=Mã, 1=Tượng, 2=Xe
@@ -78,10 +66,6 @@ def move_to_index(move):
 def index_to_move(index, board):
     """
     Giải mã chỉ số hành động về lại chess.Move hợp lệ trong bàn cờ hiện tại (nếu có).
-    Dùng cách so khớp trực tiếp với move_to_index() trên tập legal_moves thay vì viết
-    công thức đảo ngược riêng, để tránh tình trạng 2 nơi mã hoá/giải mã bị lệch nhau
-    (move_to_index luôn là nguồn sự thật duy nhất). Hàm này không bắt buộc cho pipeline
-    huấn luyện, chủ yếu phục vụ debug / kiểm tra tính đúng đắn của việc mã hoá.
     Trả về None nếu không có nước đi hợp lệ nào ứng với index này.
     """
     for legal_move in board.legal_moves:
@@ -94,12 +78,6 @@ def get_legal_action_mask(board):
     """
     Trả về mảng nhị phân kích thước ACTION_SPACE_SIZE, giá trị 1.0 tại các chỉ số ứng
     với nước đi hợp lệ ở vị trí hiện tại, còn lại là 0.0.
-
-    Dùng để loại bỏ nước đi bất hợp lệ TRƯỚC KHI tính softmax trong MCTS (xem mcts.py).
-    Nếu không mask, softmax sẽ chia xác suất cho toàn bộ ACTION_SPACE_SIZE hành động,
-    kể cả những hành động không thể xảy ra ở vị trí hiện tại, khiến tổng xác suất của
-    riêng các nước đi HỢP LỆ nhỏ hơn 1 (bị "rò rỉ" ra ngoài) -> prior_p dùng trong công
-    thức PUCT bị lệch (luôn nhỏ hơn giá trị đúng của nó).
     """
     mask = np.zeros(ACTION_SPACE_SIZE, dtype=np.float32)
     for move in board.legal_moves:

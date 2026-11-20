@@ -1,0 +1,14 @@
+Bộ quân cờ trong thư mục này lấy từ kho mã nguồn mở của Lichess:
+  https://github.com/lichess-org/lila  (thư mục public/piece/)
+Thông tin giấy phép theo đúng file COPYING.md của kho đó:
+  https://github.com/lichess-org/lila/blob/master/COPYING.md
+
+  cburnett/  Colin M.L. Burnett              GPLv2+
+             https://www.gnu.org/licenses/gpl-2.0.txt
+  chessnut/  Alexis Luengas                  Apache License 2.0
+             https://github.com/LexLuengas/chessnut-pieces/blob/master/LICENSE.txt
+  merida/    Armando Hernandez Marroquin     GPLv2+
+             https://www.gnu.org/licenses/gpl-2.0.txt
+
+Khi dùng, hãy ghi công tác giả bộ quân bạn chọn (ví dụ trong README hoặc chân trang),
+và chỉ giữ lại thư mục của bộ đang dùng nếu muốn repo gọn.

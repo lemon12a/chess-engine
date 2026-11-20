@@ -1,5 +1,11 @@
 import "@mantine/core/styles.css";
-import { ColorSchemeScript, MantineProvider } from "@mantine/core";
+import {
+  ColorSchemeScript,
+  MantineProvider,
+  mantineHtmlProps,
+} from "@mantine/core";
+import { Header } from "@/components/Header";
+import { theme } from "@/lib/theme";
 
 export const metadata = {
   title: "Cờ Vua Online",
@@ -12,12 +18,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi">
+    <html lang="vi" {...mantineHtmlProps}>
       <head>
-        <ColorSchemeScript />
+        <ColorSchemeScript defaultColorScheme="dark" />
       </head>
       <body>
-        <MantineProvider>{children}</MantineProvider>
+        <MantineProvider theme={theme} defaultColorScheme="dark">
+          <Header />
+          {children}
+        </MantineProvider>
       </body>
     </html>
   );
