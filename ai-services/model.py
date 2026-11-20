@@ -16,7 +16,7 @@ import torch.nn.functional as F
 # không phụ thuộc bạn đứng ở thư mục nào khi chạy script - tránh lặp lại lỗi
 # "tìm không thấy checkpoints" do chạy nhầm cwd đã gặp trước đây.
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_CHECKPOINT_DIR = str(SCRIPT_DIR.parent / "results" / "checkpoints")
+DEFAULT_CHECKPOINT_DIR = str(SCRIPT_DIR.parent / "ai-services" / "checkpoints")
 
 # Phải khớp với board.py: 12 plane quân cờ + 1 plane lượt đi (xem giải thích trong
 # board_to_tensor()) = 13 kênh đầu vào.
