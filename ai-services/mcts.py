@@ -7,13 +7,22 @@ import torch.nn.functional as F
 from board import board_to_tensor, move_to_index, get_legal_action_mask, ACTION_SPACE_SIZE
 
 class MCTSNode:
-    def __init__(self, board, parent=None, prior_p=0.0):
-        self.board = board.copy()
+    def __init__(self, board, parent=None, prior_p=0.0, move=None):
+        # board=None: tạo muộn (lazy) ở ensure_board() khi node lần đầu được chọn -> tránh copy bàn cờ
+        # cho mọi nước con ở mỗi lần mở rộng. Kết quả search không đổi. Gốc phải truyền bàn cờ đã copy.
+        self.board = board
+        self.move = move
         self.parent = parent
         self.prior_p = prior_p
         self.children = {} # {chess.Move: MCTSNode}
         self.visit_count = 0
         self.value_sum = 0.0
+
+    def ensure_board(self):
+        if self.board is None:
+            self.board = self.parent.board.copy()
+            self.board.push(self.move)
+        return self.board
 
     @property
     def q_value(self):
@@ -41,9 +50,7 @@ class MCTSNode:
             if move not in self.children:
                 idx = move_to_index(move)
                 prob = action_probs[idx]
-                next_board = self.board.copy()
-                next_board.push(move)
-                self.children[move] = MCTSNode(next_board, parent=self, prior_p=prob)
+                self.children[move] = MCTSNode(None, parent=self, prior_p=prob, move=move)
 
     def backpropagate(self, value):
         self.visit_count += 1
@@ -80,14 +87,21 @@ def mcts_search(board, model, num_simulations=50, temperature=0.0, return_policy
         0.03, Shogi dùng 0.15 - do branching factor khác nhau). epsilon=0.25 là trọng số
         trộn noise, cũng theo đúng paper gốc.
     """
-    root = MCTSNode(board)
+    root = MCTSNode(board.copy())
     
     for _ in range(num_simulations):
         node = root
         # Selection: đi theo PUCT đến khi gặp node lá (chưa expand) hoặc ván đấu kết thúc
         while len(node.children) > 0 and not node.board.is_game_over():
             _, node = node.select_child()
+            node.ensure_board()
             
+        # Lặp thế (chỉ xét node không phải gốc): coi như hoà (value 0) để search tự tránh đi vòng
+        # khi đang hơn và tự tìm lặp thế khi đang kém. Gốc luôn được mở rộng bình thường.
+        if node is not root and not node.board.is_game_over() and node.board.is_repetition(2):
+            node.backpropagate(0.0)
+            continue
+
         if node.board.is_game_over():
             result = node.board.result()  # "1-0" / "0-1" / "1/2-1/2" - LUÔN theo góc nhìn Trắng
             value = 1.0 if result == "1-0" else (-1.0 if result == "0-1" else 0.0)
