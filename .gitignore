@@ -19,7 +19,10 @@ logs/
 checkpoints/
 *.csv
 *.png
-games/
+# Chỉ chặn thư mục dữ liệu ván cờ ở thư mục gốc của dự án. Không dùng `games/` trần vì
+# nó chặn luôn web-platform/app/api/games (các route PvP).
+/games/
+/ai-services/games/
 *.pgn
 training_log.txt
 
