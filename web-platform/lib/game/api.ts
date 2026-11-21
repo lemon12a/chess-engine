@@ -80,3 +80,24 @@ export const matchApi = {
   status: () => request<MatchStatus>("/api/matchmaking"),
   leave: () => request<{ ok: true }>("/api/matchmaking", { method: "DELETE" }),
 };
+
+export interface AiGameSaved {
+  id: string;
+  status: "ongoing" | "finished";
+  result: "white" | "black" | "draw" | "aborted" | null;
+  reason: string | null;
+  plyCount: number;
+}
+
+/** Lưu lịch sử ván đấu với AI (ván này chạy ở trình duyệt nên phải gửi lên để lưu). */
+export const aiGameApi = {
+  create: async (body: { humanColor: "w" | "b"; levelId: string }) =>
+    (await post<{ id: string }>("/api/ai-games", body)).id,
+  save: async (id: string, body: { sans: string[]; resigned?: boolean }) =>
+    (
+      await request<{ game: AiGameSaved }>(`/api/ai-games/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      })
+    ).game,
+};
