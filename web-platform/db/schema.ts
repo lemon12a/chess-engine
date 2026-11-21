@@ -10,6 +10,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { user } from "../auth-schema";
 
@@ -152,3 +153,31 @@ export const matchQueue = pgTable("match_queue", {
   joinedAtMs: ms("joined_at_ms").notNull(),
   lastSeenMs: ms("last_seen_ms").notNull(),
 });
+
+// Lịch sử ván đấu với AI. Ván với AI chạy hoàn toàn ở trình duyệt, không có đồng
+// hồ, không tính Elo, không có đối thủ là người; nên lưu riêng, không dùng chung
+// bảng `games` (tránh bị lẫn vào logic đồng hồ, AFK, ghép trận và trang xem trực tiếp).
+export const aiGames = pgTable(
+  "ai_games",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // Khách cũng là một dòng trong bảng user. Khi khách đăng ký, ván được chuyển
+    // sang tài khoản mới (xem lib/game/guest.ts).
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    humanColor: text("human_color").$type<"w" | "b">().notNull(),
+    levelId: text("level_id").notNull(),
+    // "ongoing" = chưa kết thúc (đang chơi hoặc người chơi đã thoát giữa chừng).
+    status: text("status").$type<"ongoing" | "finished">().default("ongoing").notNull(),
+    result: gameResultEnum("result"),
+    reason: gameResultReasonEnum("result_reason"),
+    sans: jsonb("sans").$type<string[]>().default([]).notNull(),
+    plyCount: integer("ply_count").default(0).notNull(),
+    pgn: text("pgn").default("").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [index("ai_games_user_idx").on(table.userId, table.createdAt)],
+);
