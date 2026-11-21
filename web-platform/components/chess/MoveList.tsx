@@ -3,16 +3,29 @@
 import { useEffect, useRef } from "react";
 import { Box, Paper, ScrollArea, Stack, Text } from "@mantine/core";
 
-function MoveCell({ san, active }: { san?: string; active: boolean }) {
+function MoveCell({
+  san,
+  active,
+  onClick,
+}: {
+  san?: string;
+  active: boolean;
+  onClick?: () => void;
+}) {
+  const clickable = Boolean(onClick && san);
   return (
     <Text
       size="sm"
       px={6}
       py={2}
+      data-active={active || undefined}
+      role={clickable ? "button" : undefined}
+      onClick={clickable ? onClick : undefined}
       style={{
         borderRadius: 4,
         fontWeight: active ? 700 : 400,
         background: active ? "var(--mantine-color-dark-4)" : undefined,
+        cursor: clickable ? "pointer" : undefined,
       }}
     >
       {san ?? ""}
@@ -20,22 +33,42 @@ function MoveCell({ san, active }: { san?: string; active: boolean }) {
   );
 }
 
-// `sans`: danh sách nước đi dạng SAN theo thứ tự (Trắng, Đen, Trắng, ...).
-export function MoveList({ sans }: { sans: string[] }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
+interface MoveListProps {
+  /** Danh sách nước đi dạng SAN theo thứ tự (Trắng, Đen, Trắng, ...). */
+  sans: string[];
+  /** Số nửa nước đang hiển thị trên bàn cờ (0..sans.length). Mặc định: nước cuối cùng. */
+  activePly?: number;
+  /** Có hàm này thì mỗi nước bấm được; nhận số nửa nước muốn xem (1..sans.length). */
+  onSelect?: (ply: number) => void;
+}
 
-  // Tự cuộn xuống cuối khi có nước mới (hoặc khi hoàn tác)
+export function MoveList({ sans, activePly, onSelect }: MoveListProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const shownPly = activePly ?? sans.length;
+
+  // Giữ nước đang xem trong tầm nhìn (khi có nước mới, hoàn tác hoặc bấm ◀ ▶).
   useEffect(() => {
-    const el = viewportRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [sans.length]);
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const cell = viewport.querySelector<HTMLElement>('[data-active="true"]');
+    if (!cell) {
+      viewport.scrollTop = 0;
+      return;
+    }
+    const cellBox = cell.getBoundingClientRect();
+    const viewBox = viewport.getBoundingClientRect();
+    if (cellBox.top < viewBox.top)
+      viewport.scrollTop -= viewBox.top - cellBox.top;
+    else if (cellBox.bottom > viewBox.bottom)
+      viewport.scrollTop += cellBox.bottom - viewBox.bottom;
+  }, [shownPly, sans.length]);
 
   const pairs: { num: number; white?: string; black?: string }[] = [];
   sans.forEach((san, index) => {
     if (index % 2 === 0) pairs.push({ num: index / 2 + 1, white: san });
     else pairs[pairs.length - 1].black = san;
   });
-  const lastPly = sans.length - 1;
+  const activeIndex = shownPly - 1;
 
   return (
     <Paper withBorder radius="md" bg="dark.6">
@@ -62,8 +95,16 @@ export function MoveList({ sans }: { sans: string[] }) {
                 <Text size="xs" c="dimmed">
                   {pair.num}.
                 </Text>
-                <MoveCell san={pair.white} active={lastPly === index * 2} />
-                <MoveCell san={pair.black} active={lastPly === index * 2 + 1} />
+                <MoveCell
+                  san={pair.white}
+                  active={activeIndex === index * 2}
+                  onClick={onSelect ? () => onSelect(index * 2 + 1) : undefined}
+                />
+                <MoveCell
+                  san={pair.black}
+                  active={activeIndex === index * 2 + 1}
+                  onClick={onSelect ? () => onSelect(index * 2 + 2) : undefined}
+                />
               </Box>
             ))}
           </Stack>
