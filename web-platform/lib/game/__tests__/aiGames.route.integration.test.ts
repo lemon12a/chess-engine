@@ -17,6 +17,7 @@ vi.mock("@/db/client", async () => {
 import { auth } from "@/lib/auth";
 import { POST as createPost } from "@/app/api/ai-games/route";
 import { PUT as savePut } from "@/app/api/ai-games/[id]/route";
+import { GET as historyGet } from "@/app/api/history/route";
 
 const ORIGIN = "http://localhost:3000";
 
@@ -82,5 +83,24 @@ describe("API lưu ván với AI", () => {
     expect(denied.status).toBe(404);
     const bad = await savePut(call(owner, "PUT", `/api/ai-games/${id}`, { sans: ["e4", "e4"] }), ctx(id));
     expect(bad.status).toBe(400);
+  });
+
+  it("khách thấy ván vừa chơi trong lịch sử; chưa đăng nhập thì lịch sử rỗng", async () => {
+    const cookie = await signInAsGuest();
+    const { id } = await (
+      await createPost(call(cookie, "POST", "/api/ai-games", { humanColor: "w", levelId: "2" }))
+    ).json();
+    await savePut(call(cookie, "PUT", `/api/ai-games/${id}`, { sans: ["e4", "e5"] }), ctx(id));
+
+    const all = await (await historyGet(call(cookie, "GET", "/api/history?type=all"))).json();
+    expect(all.isGuest).toBe(true);
+    expect(all.items).toHaveLength(1);
+    expect(all.items[0]).toMatchObject({ kind: "ai", id, outcome: "unfinished", plyCount: 2 });
+
+    const pvpOnly = await (await historyGet(call(cookie, "GET", "/api/history?type=pvp"))).json();
+    expect(pvpOnly.items).toHaveLength(0);
+
+    const anonymous = await (await historyGet(call("", "GET", "/api/history"))).json();
+    expect(anonymous.items).toEqual([]);
   });
 });

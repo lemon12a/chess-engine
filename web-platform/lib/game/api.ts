@@ -1,3 +1,4 @@
+import type { HistoryFilter, HistoryPage } from "./historyTypes";
 import type {
   GameView,
   LiveGameSummary,
@@ -100,4 +101,9 @@ export const aiGameApi = {
         body: JSON.stringify(body),
       })
     ).game,
+};
+
+export const historyApi = {
+  list: (filter: HistoryFilter, offset: number, signal?: AbortSignal) =>
+    request<HistoryPage>(`/api/history?type=${filter}&offset=${offset}`, { signal }),
 };

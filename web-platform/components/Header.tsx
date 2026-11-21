@@ -26,7 +26,7 @@ type NavItem = { label: string; href: string; soon?: boolean };
 const NAV_ITEMS: NavItem[] = [
   { label: "Chơi", href: "/" },
   { label: "Xem trực tiếp", href: "/watch" },
-  { label: "Lịch sử ván đấu", href: "/history", soon: true },
+  { label: "Lịch sử ván đấu", href: "/history" },
   { label: "Mô hình AI", href: "/model", soon: true },
 ];
 
