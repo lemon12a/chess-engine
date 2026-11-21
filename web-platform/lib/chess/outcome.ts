@@ -25,7 +25,7 @@ export function getGameStatus({
     const winner: Color = turn === "w" ? "b" : "w";
     return {
       outcome: winner === humanColor ? "win" : "loss",
-      statusText: `Chiếu bí! ${winner === "w" ? "Trắng" : "Đen"} thắng.`,
+      statusText: "Chiếu hết.",
     };
   }
   if (game.isStalemate()) {

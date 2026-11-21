@@ -15,7 +15,8 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { authClient } from "@/lib/auth-client";
+import { authClient, ensureSession } from "@/lib/auth-client";
+import { aiGameApi } from "@/lib/game/api";
 import { getAiParams } from "@/lib/levels";
 import { findKingSquare } from "@/lib/chess/board";
 import { analyzeMaterial } from "@/lib/chess/material";
@@ -33,6 +34,17 @@ interface ChessBoardProps {
   levelId: string;
   levelLabel: string;
 }
+
+// idle: chưa có gì để lưu · saving: đang gửi lên server · saved: đã lưu · error: lưu lỗi
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+// Mỗi ván có một "bộ ghi" riêng: id bản ghi trên server (tạo khi có nước đi đầu tiên)
+// và một hàng đợi để các lần lưu chạy lần lượt, không bao giờ chồng lên nhau.
+interface Recorder {
+  id: string | null;
+  queue: Promise<void>;
+}
+const newRecorder = (): Recorder => ({ id: null, queue: Promise.resolve() });
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,6 +69,11 @@ export function ChessBoard({
   // AI đang chờ (tránh AI đi nước cũ vào ván mới).
   const requestIdRef = useRef(0);
 
+  // ---- Lưu lịch sử ván đấu ----
+  const recorderRef = useRef<Recorder>(newRecorder());
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [savedGameId, setSavedGameId] = useState<string | null>(null);
+
   const { data: session } = authClient.useSession();
   const humanName = session?.user.name ?? "Khách";
 
@@ -71,10 +88,9 @@ export function ChessBoard({
     ? game.moves({ square: selected, verbose: true }).map((move) => move.to)
     : [];
   const checkedKingSquare = game.isCheck() ? findKingSquare(board, turn) : null;
+  // Ván đã kết thúc thì kết quả được chốt trong lịch sử, nên không cho hoàn tác nữa.
   const canUndo =
-    !aiThinking &&
-    !resigned &&
-    history.some((move) => move.color === humanColor);
+    !aiThinking && !isOver && history.some((move) => move.color === humanColor);
 
   const { outcome, statusText } = getGameStatus({
     game,
@@ -82,6 +98,31 @@ export function ChessBoard({
     resigned,
     aiThinking,
   });
+
+  // ---- Lưu lịch sử ----
+  // Gửi toàn bộ danh sách nước đi hiện tại; server tự kiểm tra và suy ra kết quả.
+  // Lỗi lưu không làm gián đoạn ván cờ: chỉ báo cho người chơi và cho thử lại.
+  function persist(options: { resigned?: boolean } = {}) {
+    const sans = game.history();
+    const recorder = recorderRef.current;
+    if (sans.length === 0 && !recorder.id) return; // chưa có gì để lưu
+    setSaveStatus("saving");
+    recorder.queue = recorder.queue.then(async () => {
+      try {
+        if (!recorder.id) {
+          await ensureSession(); // khách chưa có tài khoản thì tạo tài khoản khách
+          recorder.id = await aiGameApi.create({ humanColor, levelId });
+        }
+        await aiGameApi.save(recorder.id, { sans, resigned: options.resigned });
+        if (recorder === recorderRef.current) {
+          setSavedGameId(recorder.id);
+          setSaveStatus("saved");
+        }
+      } catch {
+        if (recorder === recorderRef.current) setSaveStatus("error");
+      }
+    });
+  }
 
   // ---- Gọi AI service ----
   async function requestAiMove() {
@@ -113,6 +154,7 @@ export function ChessBoard({
         throw new Error(`AI trả về nước đi không hợp lệ: ${data.move}`);
       }
       setVersion((v) => v + 1);
+      persist();
     } catch (error) {
       if (myRequest !== requestIdRef.current) return;
       // TypeError = không kết nối được (service tắt, sai cổng, bị CORS chặn)
@@ -137,6 +179,7 @@ export function ChessBoard({
       const move = game.move({ from: selected, to: square, promotion: "q" });
       setSelected(null);
       setVersion((v) => v + 1);
+      if (move) persist();
       if (move && !game.isGameOver()) void requestAiMove();
       return;
     }
@@ -147,6 +190,10 @@ export function ChessBoard({
 
   function resetGame() {
     requestIdRef.current += 1;
+    // Ván cũ giữ nguyên trong lịch sử; ván mới sẽ có bản ghi riêng khi có nước đi đầu.
+    recorderRef.current = newRecorder();
+    setSavedGameId(null);
+    setSaveStatus("idle");
     game.reset();
     setSelected(null);
     setResigned(false);
@@ -165,6 +212,7 @@ export function ChessBoard({
     setSelected(null);
     setAiError(null);
     setVersion((v) => v + 1);
+    persist(); // lịch sử luôn khớp với thế cờ đang hiển thị
   }
 
   function handleResign() {
@@ -173,6 +221,7 @@ export function ChessBoard({
     setAiThinking(false);
     setSelected(null);
     setResigned(true);
+    persist({ resigned: true });
   }
 
   // Nếu người chơi cầm Đen thì AI (Trắng) phải đi trước khi vào ván.
@@ -240,9 +289,29 @@ export function ChessBoard({
             <Badge variant="light">{levelLabel}</Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            {statusText}
+            {outcome ? "Ván đã kết thúc." : statusText}
           </Text>
         </Paper>
+
+        {saveStatus === "error" ? (
+          <Alert
+            color="yellow"
+            variant="light"
+            title="Chưa lưu được lịch sử ván"
+          >
+            <Text size="sm" mb="xs">
+              Ván vẫn chơi bình thường. Hãy thử lưu lại để ván này có trong Lịch
+              sử ván đấu.
+            </Text>
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => persist({ resigned })}
+            >
+              Thử lưu lại
+            </Button>
+          </Alert>
+        ) : null}
 
         {aiError ? (
           <Alert color="red" variant="light" title="Không kết nối được AI">
@@ -277,9 +346,24 @@ export function ChessBoard({
             <Text size="sm" mb="xs">
               {statusText}
             </Text>
-            <Button size="xs" onClick={resetGame}>
-              Ván mới
-            </Button>
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Text size="xs" c="dimmed">
+                {saveStatus === "saved"
+                  ? "Đã lưu vào lịch sử."
+                  : saveStatus === "saving"
+                    ? "Đang lưu vào lịch sử…"
+                    : ""}
+              </Text>
+              {savedGameId && saveStatus === "saved" ? (
+                <Button
+                  component={Link}
+                  href={`/history/ai/${savedGameId}`}
+                  size="xs"
+                >
+                  Xem lại ván
+                </Button>
+              ) : null}
+            </Group>
           </Alert>
         ) : null}
 
